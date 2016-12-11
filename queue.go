@@ -9,7 +9,7 @@ const nameSpace = "goworker::"
 
 type Queue interface {
 	Push(values ...*job) (err error)
-	Pop(queue string) (job job, err error)
+	Pop(queue string) (job *job, err error)
 }
 
 type redisQueue struct {
@@ -22,7 +22,8 @@ func (p *redisQueue) Push(jobs ...*job) (err error) {
 	arg[0] = nameSpace + b2S(jobs[0].queue)
 
 	for i, j := range jobs {
-		arg[i + 1] = j.encode()
+		d := j.encode()
+		arg[i + 1] = d
 	}
 	c := p.redisPool.Get()
 	_, err = c.Do("LPUSH", arg...)
@@ -35,7 +36,7 @@ func (p *redisQueue) Push(jobs ...*job) (err error) {
 }
 
 // it's block, maybe u need use 'go'
-func (p *redisQueue) Pop(queue string) (job job, err error) {
+func (p *redisQueue) Pop(queue string) (j *job, err error) {
 	c := p.redisPool.Get()
 	v, err := c.Do("BRPOP", nameSpace + queue, "0")
 	c.Close()
@@ -54,7 +55,8 @@ func (p *redisQueue) Pop(queue string) (job job, err error) {
 		return
 	}
 
-	ok = job.decode(s2B(queue), valueBs)
+	j = &job{}
+	ok = j.decode(s2B(queue), valueBs)
 	if !ok {
 		err = errors.New("can not decode")
 		return
