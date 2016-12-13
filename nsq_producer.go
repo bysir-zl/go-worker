@@ -2,7 +2,6 @@ package worker
 
 import (
 	"github.com/nsqio/go-nsq"
-	"kuaifa.com/kuaifa/kuaifa-api-service/config"
 	"time"
 )
 
@@ -10,9 +9,9 @@ type NsqProducer struct {
 	producer *nsq.Producer
 }
 
-func NewNsqProducer() (*NsqProducer, error) {
+func NewNsqProducer(host string ) (*NsqProducer, error) {
 	cfg := nsq.NewConfig()
-	p, err := nsq.NewProducer(config.Config.NsqdHost, cfg)
+	p, err := nsq.NewProducer(host, cfg)
 	if err != nil {
 		return nil, err
 	}

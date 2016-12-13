@@ -4,10 +4,17 @@ import (
 	"testing"
 	"log"
 	"time"
+	"strconv"
 )
 
+const NsqdHost = "127.0.0.1:4150"
+
+func newConsumer(topic, channel string) (Consumer, error) {
+	return NewNsqConsumer(NsqdHost, topic, channel)
+}
+
 func TestPublish(t *testing.T) {
-	c, _ := NewClient()
+	c, _ := NewClient(newProducer)
 
 	j := NewJob("order")
 	j.SetParam("id", "1")
@@ -20,17 +27,17 @@ func TestPublish(t *testing.T) {
 }
 
 func TestHandle(t *testing.T) {
-	s, _ := NewServer()
+	s, _ := NewServer(newConsumer)
 	s.Handle("order", "work", func(j *Job) JobFlag {
 		id, _ := j.Param("id")
-		log.Println("work - ", "order id: " + id)
+		log.Println("work - ", "order id: " + id + " #" + strconv.Itoa(int(j.count)))
 		<-time.After(2 * time.Second)
 		return JobFlagSuccess
 	})
 
 	s.Handle("order", "loger", func(j *Job) JobFlag {
 		id, _ := j.Param("id")
-		log.Println("loger - ", "order id: " + id)
+		log.Println("loger - ", "order id: " + id + " #" + strconv.Itoa(int(j.count)))
 		<-time.After(1 * time.Second)
 		return JobFlagRetryNow
 	})
@@ -42,9 +49,13 @@ func TestHandle(t *testing.T) {
 	s.Server()
 }
 
+func newProducer() (Producer, error) {
+	return NewNsqProducer(NsqdHost)
+}
+
 // 98004 ns/op
 func BenchmarkPublish(b *testing.B) {
-	c, _ := NewClient()
+	c, _ := NewClient(newProducer)
 
 	j := NewJob("order")
 	j.SetParam("id", "1")

@@ -6,6 +6,8 @@ import (
 	"time"
 )
 
+type JobFlag int
+
 const (
 	JobFlagRetryWait JobFlag = iota // wait 2^count second then retry
 	JobFlagRetryNow  // retry now
@@ -15,15 +17,13 @@ const (
 
 const maxRetryCount byte = 5
 
-type JobFlag int
-
 type worker struct {
 }
 
 type workerServer struct {
-	consumers []Consumer              //
-	producer  Producer
-	listener  func(j *Job, err error) //
+	consumers       []Consumer              //
+	listener        func(j *Job, err error) //
+	consumerCreator func(topic, channel string) (Consumer, error)
 }
 
 type Handler func(j *Job) JobFlag
@@ -35,7 +35,7 @@ func (p *workerServer) callListen(j *Job, err error) {
 }
 
 func (p *workerServer) Handle(topic, channel string, fun Handler) (err error) {
-	consumer, err := newConsumer(topic, channel)
+	consumer, err := p.consumerCreator(topic, channel)
 	if err != nil {
 		return
 	}
@@ -64,21 +64,22 @@ func (p *workerServer) doJob(job *Job, fun Handler) {
 	switch flag {
 	case JobFlagRetryNow:
 		job.count++
-		if job.count < maxRetryCount {
-			p.producer.Publish(job)
+		if job.count <= maxRetryCount {
+			p.doJob(job, fun)
 		} else {
 			job.Status = JobStatusFailed
 			p.callListen(job, nil)
 		}
 	case JobFlagRetryWait:
 		job.count++
-		if job.count < maxRetryCount {
+		if job.count <= maxRetryCount {
 			t := int64(math.Pow(1.9, float64(job.count)))
 			if t > 60 {
 				t = 60
 			}
 			d := time.Duration(t * int64(time.Second))
-			p.producer.DeferredPublish(d, job)
+			<-time.After(d)
+			p.doJob(job, fun)
 		} else {
 			job.Status = JobStatusFailed
 			p.callListen(job, nil)
@@ -104,6 +105,7 @@ func (p *workerServer) Server() {
 	}
 
 	<-exitChan
+	close(exitChan)
 
 	for _, c := range p.consumers {
 		c.Stop()
@@ -117,14 +119,10 @@ func (p *workerServer) Listen(fun func(j *Job, err error)) {
 	return
 }
 
-func NewServer() (*workerServer, error) {
-	p, err := newProducer()
-	if err != nil {
-		return nil, err
-	}
+func NewServer(consumerCreator func(topic, channel string) (Consumer, error)) (*workerServer, error) {
 	c := workerServer{
 		consumers: []Consumer{},
-		producer:p,
+		consumerCreator:consumerCreator,
 	}
 	return &c, nil
 }
@@ -137,8 +135,8 @@ func (p *workerClient) Push(jobs ...*Job) {
 	p.producer.Publish(jobs...)
 }
 
-func NewClient() (*workerClient, error) {
-	p, err := newProducer()
+func NewClient(producerCreator func() (Producer, error)) (*workerClient, error) {
+	p, err := producerCreator()
 	if err != nil {
 		return nil, err
 	}
@@ -148,10 +146,3 @@ func NewClient() (*workerClient, error) {
 	return &c, nil
 }
 
-func newConsumer(topic, channel string) (Consumer, error) {
-	return NewNsqConsumer(topic, channel)
-}
-
-func newProducer() (Producer, error) {
-	return NewNsqProducer()
-}

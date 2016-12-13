@@ -2,7 +2,6 @@ package worker
 
 import (
 	"github.com/nsqio/go-nsq"
-	"kuaifa.com/kuaifa/kuaifa-api-service/config"
 )
 
 type NsqConsumer struct {
@@ -10,9 +9,10 @@ type NsqConsumer struct {
 	stopChan chan int
 	topic    string
 	channel  string
+	host     string
 }
 
-func NewNsqConsumer(topic string, channel string) (*NsqConsumer, error) {
+func NewNsqConsumer(host, topic string, channel string) (*NsqConsumer, error) {
 	cfg := nsq.NewConfig()
 	p, err := nsq.NewConsumer(topic, channel, cfg)
 	if err != nil {
@@ -24,6 +24,7 @@ func NewNsqConsumer(topic string, channel string) (*NsqConsumer, error) {
 		stopChan:p.StopChan,
 		topic:topic,
 		channel:channel,
+		host:host,
 	}, nil
 }
 
@@ -33,8 +34,8 @@ type NsqHandler struct {
 }
 
 func (h *NsqHandler) HandleMessage(message *nsq.Message) error {
-	var job Job
-	job.decode(s2B(h.consumer.topic), message.Body)
+	var job = NewJob(h.consumer.topic)
+	job.decode(message.Body)
 	h.handler(&job)
 	return nil
 }
@@ -53,7 +54,7 @@ func (p *NsqConsumer) Handle(fun func(j *Job)) {
 }
 
 func (p *NsqConsumer) Server() (err error) {
-	err = p.consumer.ConnectToNSQD(config.Config.NsqdHost)
+	err = p.consumer.ConnectToNSQD(p.host)
 	return
 }
 

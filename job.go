@@ -22,10 +22,11 @@ type Job struct {
 func NewJob(topic string) *Job {
 	return &Job{
 		topic:s2B(topic),
+		count:1,
 	}
 }
 
-// encode to []byte like "key=value&name=bysir#0"
+// encode to []byte like "key=value&name=bysir"
 func (p *Job) encode() []byte {
 	var queryBuf bytes.Buffer
 	if p.keys != nil {
@@ -38,20 +39,22 @@ func (p *Job) encode() []byte {
 			queryBuf.Write(p.values[i])
 		}
 	}
-	queryBuf.WriteByte('#')
-	queryBuf.WriteByte(p.count)
+
+	// now, count is not save to queue
+	//queryBuf.WriteByte('#')
+	//queryBuf.WriteByte(p.count)
 
 	return queryBuf.Bytes()
 }
 
-func (p *Job) decode(topic, data []byte) bool {
-	p.topic = topic
-
-	vAndC := bytes.Split(data, []byte{'#'})
-	values := vAndC[0]
-	if len(vAndC) == 2 && len(vAndC[1]) != 0 {
-		p.count = vAndC[1][0]
-	}
+func (p *Job) decode(data []byte) bool {
+	// now, count is not save to queue
+	//vAndC := bytes.Split(data, []byte{'#'})
+	//values := vAndC[0]
+	//if len(vAndC) == 2 && len(vAndC[1]) != 0 {
+	//	p.count = vAndC[1][0]
+	//}
+	values := data
 	if len(values) != 0 {
 		vs := bytes.Split(values, []byte{'&'})
 		vsLen := len(vs)
@@ -74,10 +77,9 @@ func (p *Job) String() string {
 	var buf bytes.Buffer
 	buf.Write(p.topic)
 	buf.WriteByte(':')
-	data := p.encode()
-	dataLen := len(data)
-	data = append(data[0:dataLen - 1], data[dataLen - 1] + 48)
-	buf.Write(data)
+	buf.Write(p.encode())
+	buf.WriteByte('#')
+	buf.WriteByte(p.count + 48)
 	return buf.String()
 }
 

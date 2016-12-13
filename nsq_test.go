@@ -3,7 +3,6 @@ package worker
 import (
 	"testing"
 	"github.com/nsqio/go-nsq"
-	"kuaifa.com/kuaifa/kuaifa-api-service/config"
 	"log"
 )
 
@@ -21,7 +20,7 @@ func (p *Hand2)HandleMessage(message *nsq.Message) error {
 
 func TestNsqPublish(t *testing.T) {
 	cfg := nsq.NewConfig()
-	p, err := nsq.NewProducer(config.Config.NsqdHost, cfg)
+	p, err := nsq.NewProducer(NsqdHost, cfg)
 	if err != nil {
 		log.Println(err)
 		return
@@ -38,7 +37,7 @@ func TestNsqHandle(t *testing.T) {
 		return
 	}
 	p.AddHandler(&Hand1{})
-	p.ConnectToNSQD(config.Config.NsqdHost)
+	p.ConnectToNSQD(NsqdHost)
 
 	p2, err := nsq.NewConsumer("order", "number", cfg)
 	if err != nil {
@@ -46,7 +45,7 @@ func TestNsqHandle(t *testing.T) {
 		return
 	}
 	p2.AddHandler(&Hand2{})
-	p2.ConnectToNSQD(config.Config.NsqdHost)
+	p2.ConnectToNSQD(NsqdHost)
 
 	<-p.StopChan
 }
