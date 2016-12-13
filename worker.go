@@ -30,6 +30,9 @@ type Handler func(j *Job) JobFlag
 
 func (p *workerServer) callListen(j *Job, err error) {
 	if p.listener != nil {
+		defer func() {
+			recover()
+		}()
 		p.listener(j, err)
 	}
 }
@@ -40,13 +43,13 @@ func (p *workerServer) Handle(topic, channel string, fun Handler) (err error) {
 		return
 	}
 	consumer.Handle(func(j *Job) {
-		go p.doJob(j, fun)
+		go p.callJob(j, fun)
 	})
 	p.consumers = append(p.consumers, consumer)
 	return
 }
 
-func (p *workerServer) doJob(job *Job, fun Handler) {
+func (p *workerServer) callJob(job *Job, handler Handler) {
 	defer func() {
 		i := recover()
 		if i != nil {
@@ -60,26 +63,25 @@ func (p *workerServer) doJob(job *Job, fun Handler) {
 		}
 	}()
 
-	flag := fun(job)
+	job.count++
+	flag := handler(job)
 	switch flag {
 	case JobFlagRetryNow:
-		job.count++
-		if job.count <= maxRetryCount {
-			p.doJob(job, fun)
+		if job.count < maxRetryCount {
+			p.callJob(job, handler)
 		} else {
 			job.Status = JobStatusFailed
 			p.callListen(job, nil)
 		}
 	case JobFlagRetryWait:
-		job.count++
-		if job.count <= maxRetryCount {
+		if job.count < maxRetryCount {
 			t := int64(math.Pow(1.9, float64(job.count)))
 			if t > 60 {
 				t = 60
 			}
 			d := time.Duration(t * int64(time.Second))
 			<-time.After(d)
-			p.doJob(job, fun)
+			p.callJob(job, handler)
 		} else {
 			job.Status = JobStatusFailed
 			p.callListen(job, nil)
@@ -127,6 +129,12 @@ func NewServer(consumerCreator func(topic, channel string) (Consumer, error)) (*
 	return &c, nil
 }
 
+func NewServerForNsq(host string) (*workerServer, error) {
+	return NewServer(func(topic, channel string) (Consumer, error) {
+		return NewNsqConsumer(host, topic, channel)
+	})
+}
+
 type workerClient struct {
 	producer Producer
 }
@@ -146,3 +154,8 @@ func NewClient(producerCreator func() (Producer, error)) (*workerClient, error) 
 	return &c, nil
 }
 
+func NewClientForNsq(host string) (*workerClient, error) {
+	return NewClient(func() (Producer, error) {
+		return NewNsqProducer(host)
+	})
+}

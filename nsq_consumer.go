@@ -35,8 +35,9 @@ type NsqHandler struct {
 
 func (h *NsqHandler) HandleMessage(message *nsq.Message) error {
 	var job = NewJob(h.consumer.topic)
+	job.channel = s2B(h.consumer.channel)
 	job.decode(message.Body)
-	h.handler(&job)
+	h.handler(job)
 	return nil
 }
 

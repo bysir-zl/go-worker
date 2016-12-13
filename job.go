@@ -12,17 +12,17 @@ const (
 )
 
 type Job struct {
-	topic  []byte // topic name
-	keys   [][]byte
-	values [][]byte
-	count  byte   // retry count
-	Status JobStatus
+	topic   []byte // topic name
+	channel []byte // channel name, only listen use it
+	keys    [][]byte
+	values  [][]byte
+	count   byte   // retry count
+	Status  JobStatus
 }
 
 func NewJob(topic string) *Job {
 	return &Job{
 		topic:s2B(topic),
-		count:1,
 	}
 }
 
@@ -76,11 +76,21 @@ func (p *Job) decode(data []byte) bool {
 func (p *Job) String() string {
 	var buf bytes.Buffer
 	buf.Write(p.topic)
+	buf.WriteByte(',')
+	buf.Write(p.channel)
 	buf.WriteByte(':')
 	buf.Write(p.encode())
 	buf.WriteByte('#')
 	buf.WriteByte(p.count + 48)
 	return buf.String()
+}
+
+func (p *Job) Channel() string {
+	return b2S(p.channel)
+}
+
+func (p *Job) Topic() string {
+	return b2S(p.topic)
 }
 
 func (p *Job) Param(key string) (value string, ok bool) {
