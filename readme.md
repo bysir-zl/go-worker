@@ -27,6 +27,20 @@ s.Listen(func(j *Job, err error) {
 s.Server()
 ```
 
+it will print :
+```
+2016/12/14 00:20:34 INF    1 [order/work] (127.0.0.1:4150) connecting to nsqd
+2016/12/14 00:20:34 INF    2 [order/loger] (127.0.0.1:4150) connecting to nsqd
+2016/12/14 00:20:40 work -  order id: 1 #1
+2016/12/14 00:20:40 loger -  order id: 1 #1
+2016/12/14 00:20:41 loger -  order id: 1 #2
+2016/12/14 00:20:42 loger -  order id: 1 #3
+2016/12/14 00:20:42 listen -  0 order,work:id=1#1 <nil>
+2016/12/14 00:20:43 loger -  order id: 1 #4
+2016/12/14 00:20:44 loger -  order id: 1 #5
+2016/12/14 00:20:45 listen -  1 order,loger:id=1#5 <nil>
+```
+
 client.go
 ```go
 c, _ := NewClientForNsq(NsqdHost)
