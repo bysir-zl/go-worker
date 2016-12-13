@@ -16,7 +16,7 @@ type Job struct {
 	channel []byte // channel name, only listen use it
 	keys    [][]byte
 	values  [][]byte
-	count   byte   // retry count
+	count   int    // retry count
 	Status  JobStatus
 }
 
@@ -81,7 +81,7 @@ func (p *Job) String() string {
 	buf.WriteByte(':')
 	buf.Write(p.encode())
 	buf.WriteByte('#')
-	buf.WriteByte(p.count + 48)
+	buf.WriteByte(byte(p.count) + 48)
 	return buf.String()
 }
 
@@ -91,6 +91,9 @@ func (p *Job) Channel() string {
 
 func (p *Job) Topic() string {
 	return b2S(p.topic)
+}
+func (p *Job) Count() int {
+	return p.count
 }
 
 func (p *Job) Param(key string) (value string, ok bool) {
