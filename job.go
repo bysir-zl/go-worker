@@ -1,30 +1,32 @@
 package worker
 
-import "bytes"
+import (
+	"bytes"
+)
 
 type JobStatus int
 
 const (
-	JobStatusSuccess = iota
-	JobStatusRetryWait // wait 2^count second then retry
-	JobStatusRetryNow // retry now
+	JobStatusSuccess JobStatus = iota
+	JobStatusFailed // mark job failed
 )
 
-type job struct {
-	queue  []byte // queue's name
+type Job struct {
+	topic  []byte // topic name
 	keys   [][]byte
 	values [][]byte
 	count  byte   // retry count
+	Status JobStatus
 }
 
-func NewJob(queue string) *job {
-	return &job{
-		queue:s2B(queue),
+func NewJob(topic string) *Job {
+	return &Job{
+		topic:s2B(topic),
 	}
 }
 
 // encode to []byte like "key=value&name=bysir#0"
-func (p *job) encode() []byte {
+func (p *Job) encode() []byte {
 	var queryBuf bytes.Buffer
 	if p.keys != nil {
 		for i, k := range p.keys {
@@ -42,8 +44,8 @@ func (p *job) encode() []byte {
 	return queryBuf.Bytes()
 }
 
-func (p *job) decode(queue []byte, data []byte) bool {
-	p.queue = queue
+func (p *Job) decode(topic, data []byte) bool {
+	p.topic = topic
 
 	vAndC := bytes.Split(data, []byte{'#'})
 	values := vAndC[0]
@@ -68,15 +70,18 @@ func (p *job) decode(queue []byte, data []byte) bool {
 	return true
 }
 
-func (p *job) String() string {
+func (p *Job) String() string {
 	var buf bytes.Buffer
-	buf.Write(p.queue)
+	buf.Write(p.topic)
 	buf.WriteByte(':')
-	buf.Write(p.encode())
+	data := p.encode()
+	dataLen := len(data)
+	data = append(data[0:dataLen - 1], data[dataLen - 1] + 48)
+	buf.Write(data)
 	return buf.String()
 }
 
-func (p *job) Param(key string) (value string, ok bool) {
+func (p *Job) Param(key string) (value string, ok bool) {
 	if p.keys == nil {
 		return
 	}
@@ -91,7 +96,7 @@ func (p *job) Param(key string) (value string, ok bool) {
 	return
 }
 
-func (p *job) SetParam(key string, value string) {
+func (p *Job) SetParam(key string, value string) {
 	kb := s2B(key)
 	vb := s2B(value)
 	if p.keys == nil {

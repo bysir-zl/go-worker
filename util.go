@@ -10,7 +10,7 @@ import (
 // Note it may break if string and/or slice header will change
 // in the future go versions.
 func b2S(b []byte) string {
-return *(*string)(unsafe.Pointer(&b))
+	return *(*string)(unsafe.Pointer(&b))
 }
 
 // s2b converts string to a byte slice without memory allocation.
@@ -18,11 +18,11 @@ return *(*string)(unsafe.Pointer(&b))
 // Note it may break if string and/or slice header will change
 // in the future go versions.
 func s2B(s string) []byte {
-sh := (*reflect.StringHeader)(unsafe.Pointer(&s))
-bh := reflect.SliceHeader{
-Data: sh.Data,
-Len:  sh.Len,
-Cap:  sh.Len,
-}
-return *(*[]byte)(unsafe.Pointer(&bh))
+	sh := (*reflect.StringHeader)(unsafe.Pointer(&s))
+	bh := reflect.SliceHeader{
+		Data: sh.Data,
+		Len:  sh.Len,
+		Cap:  sh.Len,
+	}
+	return *(*[]byte)(unsafe.Pointer(&bh))
 }

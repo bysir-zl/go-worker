@@ -3,62 +3,53 @@ package worker
 import (
 	"testing"
 	"log"
+	"time"
 )
 
-func TestServer(t *testing.T) {
-	w := NewServer("127.0.0.1:6379")
-	w.Handle("order", func(j *job) JobStatus {
-		orderId, ok := j.Param("id")
-		if ok {
-			log.Print("orderId:", orderId)
-		} else {
-			log.Print("order error")
-		}
-		return JobStatusRetryNow
-	})
-	w.Handle("auth", func(j *job) JobStatus {
-		orderId, ok := j.Param("id")
-		if ok {
-			log.Print("authId:", orderId)
-		} else {
-			log.Print("auth error")
-		}
-		return JobStatusRetryWait
-	})
-	w.Handle("user", func(j *job) JobStatus {
-		orderId, ok := j.Param("id")
-		if ok {
-			log.Print("userId:", orderId)
-		} else {
-			log.Print("user error")
-		}
-		return JobStatusSuccess
-	})
-	w.Listen(func(status int, j *job) {
-		// todo
-	})
-	w.Server()
-}
+func TestPublish(t *testing.T) {
+	c, _ := NewClient()
 
-func TestClient(t *testing.T) {
-	w := NewClient("127.0.0.1:6379")
-	j := NewJob("order")
-	j.SetParam("id", "10086")
-	w.Push(j)
-	j = NewJob("auth")
-	j.SetParam("id", "1")
-	w.Push(j)
-	j = NewJob("user")
-	j.SetParam("id", "2")
-	w.Push(j)
-}
-
-// 54485 ns/op
-func BenchmarkClient(b *testing.B) {
-	w := NewClient("127.0.0.1:6379")
 	j := NewJob("order")
 	j.SetParam("id", "1")
+	j2 := NewJob("order")
+	j2.SetParam("id", "2")
+	c.Push(j)
+	c.Push(j2)
+	//c.Push(j)
+	//c.Push(j2)
+}
+
+func TestHandle(t *testing.T) {
+	s, _ := NewServer()
+	s.Handle("order", "work", func(j *Job) JobFlag {
+		id, _ := j.Param("id")
+		log.Println("work - ", "order id: " + id)
+		<-time.After(2 * time.Second)
+		return JobFlagSuccess
+	})
+
+	s.Handle("order", "loger", func(j *Job) JobFlag {
+		id, _ := j.Param("id")
+		log.Println("loger - ", "order id: " + id)
+		<-time.After(1 * time.Second)
+		return JobFlagRetryNow
+	})
+
+	s.Listen(func(j *Job, err error) {
+		log.Println("listen - ", j.Status, j.String())
+	})
+
+	s.Server()
+}
+
+// 98004 ns/op
+func BenchmarkPublish(b *testing.B) {
+	c, _ := NewClient()
+
+	j := NewJob("order")
+	j.SetParam("id", "1")
+	//j.SetParam("name", "bysir")
 	for i := 0; i < b.N; i++ {
-		w.Push(j)
+		c.Push(j)
 	}
 }
