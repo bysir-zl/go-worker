@@ -28,7 +28,7 @@ func TestNsqPublish(t *testing.T) {
 	p.Publish("order", []byte("test"))
 }
 
-// publish one message, all Consumer will get it if they topic is same
+// publish one message, all Consumer will get it if they's topic is same
 func TestNsqHandle(t *testing.T) {
 	cfg := nsq.NewConfig()
 	p, err := nsq.NewConsumer("order", "default", cfg)
@@ -49,54 +49,3 @@ func TestNsqHandle(t *testing.T) {
 
 	<-p.StopChan
 }
-//
-//func TestClient(t *testing.T) {
-//	p, err := NewNsqProducer()
-//	if err != nil {
-//		t.Error(err)
-//		return
-//	}
-//	for {
-//		err = p.Publish("order", []byte("order"))
-//		<-time.After(3*time.Second)
-//	}
-//	err = p.Publish("auth", []byte("auth"))
-//	log.Println("push", err)
-//}
-//
-//func BenchmarkProducer(b *testing.B) {
-//	p, err := NewNsqProducer()
-//	if err != nil {
-//		return
-//	}
-//	for i := 0; i < b.N; i++ {
-//		err = p.Publish("order", []byte("order"))
-//	}
-//}
-//
-//func TestService(t *testing.T) {
-//	c, err := NewNsqConsumer("order")
-//	if err != nil {
-//		t.Error(err)
-//		return
-//	}
-//	c.Handle(func(msg *nsq.Message) error {
-//		log.Println(string(msg.Body))
-//		return nil
-//	})
-//
-//	err = c.Server()
-//	if err != nil {
-//		t.Error(err)
-//		return
-//	}
-//
-//	for {
-//		select {
-//		case <-c.stopChan:
-//			return
-//		}
-//	}
-//
-//	log.Println("stoped")
-//}

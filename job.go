@@ -7,8 +7,10 @@ import (
 type JobStatus int
 
 const (
-	JobStatusSuccess JobStatus = iota
-	JobStatusFailed // mark job failed
+	JobStatusDoing JobStatus = iota
+	JobStatusSuccess
+	JobStatusFailed //
+	JobStatusRetrying //
 )
 
 type Job struct {
@@ -75,6 +77,16 @@ func (p *Job) decode(data []byte) bool {
 
 func (p *Job) String() string {
 	var buf bytes.Buffer
+	switch p.Status {
+	case JobStatusFailed:
+		buf.WriteString("FAILED ")
+	case JobStatusSuccess:
+		buf.WriteString("SUCCESS ")
+	case JobStatusDoing:
+		buf.WriteString("DOING ")
+	case JobStatusRetrying:
+		buf.WriteString("RETRYING ")
+	}
 	buf.Write(p.topic)
 	buf.WriteByte(',')
 	buf.Write(p.channel)
