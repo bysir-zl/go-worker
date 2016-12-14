@@ -32,7 +32,7 @@ func TestHandle(t *testing.T) {
 	})
 
 	s.Listen(func(j *Job, err error) {
-		log.Println("listen - ", j.Status, j.String(), err)
+		log.Println("listen - ", j, err)
 	})
 
 	s.Server()
