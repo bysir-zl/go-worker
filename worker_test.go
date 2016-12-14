@@ -4,7 +4,6 @@ import (
 	"testing"
 	"log"
 	"time"
-	"strconv"
 )
 
 const NsqdHost = "127.0.0.1:4150"
@@ -20,18 +19,16 @@ func TestPublish(t *testing.T) {
 
 func TestHandle(t *testing.T) {
 	s, _ := NewServerForNsq(NsqdHost)
-	s.Handle("order", "work", func(j *Job) JobFlag {
-		id, _ := j.Param("id")
-		log.Println("work - ", "order id: " + id + " #" + strconv.Itoa(int(j.count)))
+	s.Handle("order", "work", func(j *Job) (JobFlag,error) {
+		log.Println("work - ", j)
 		<-time.After(2 * time.Second)
-		return JobFlagSuccess
+		return JobFlagSuccess,nil
 	})
 
-	s.Handle("order", "loger", func(j *Job) JobFlag {
-		id, _ := j.Param("id")
-		log.Println("loger - ", "order id: " + id + " #" + strconv.Itoa(int(j.count)))
+	s.Handle("order", "loger", func(j *Job) (JobFlag,error)  {
+		log.Println("loger - ", j)
 		<-time.After(1 * time.Second)
-		return JobFlagRetryNow
+		return JobFlagRetryNow,nil
 	})
 
 	s.Listen(func(j *Job, err error) {
