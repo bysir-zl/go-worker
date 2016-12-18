@@ -19,16 +19,23 @@ func TestPublish(t *testing.T) {
 
 func TestHandle(t *testing.T) {
 	s, _ := NewServerForNsq(NsqdHost)
-	s.Handle("order", "work", func(j *Job) (JobFlag,error) {
+	s.Handle("order", "work", func(j *Job) (JobFlag, error) {
 		log.Println("work - ", j)
 		<-time.After(2 * time.Second)
-		return JobFlagSuccess,nil
+		return LSuccess, nil
 	})
 
-	s.Handle("order", "loger", func(j *Job) (JobFlag,error)  {
+	s.Handle("order", "loger", func(j *Job) (JobFlag, error) {
 		log.Println("loger - ", j)
 		<-time.After(1 * time.Second)
-		return JobFlagRetryNow,nil
+		return LRetryNow, nil
+	})
+
+	j := NewJob("Loopper")
+	j.SetInterval(time.Second * 2)
+	s.AddLoopJob(j, func(j *Job) (JobFlag, error) {
+		log.Print("loop - ", j)
+		return LSuccess, nil
 	})
 
 	s.Listen(func(j *Job, err error) {

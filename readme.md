@@ -18,13 +18,13 @@ s, _ := NewServerForNsq(NsqdHost)
 s.Handle("order", "work", func(j *Job) (JobFlag,error) {
     log.Println("work - ", j)
     <-time.After(2 * time.Second)
-    return JobFlagSuccess,nil
+    return LSuccess,nil
 })
 
 s.Handle("order", "loger", func(j *Job) (JobFlag,error)  {
     log.Println("loger - ", j)
     <-time.After(1 * time.Second)
-    return JobFlagRetryNow,nil
+    return LRetryNow,nil
 })
 
 s.Listen(func(j *Job, err error) {

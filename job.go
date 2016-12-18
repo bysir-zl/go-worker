@@ -2,49 +2,74 @@ package worker
 
 import (
 	"bytes"
+	"time"
 )
+
+const DefalutMaxRetryCount = 5
 
 type JobStatus int
 
 const (
-	JobStatusDoing JobStatus = iota
-	JobStatusSuccess
-	JobStatusFailed //
-	JobStatusRetrying //
+	SDoing    JobStatus = iota
+	SSuccess
+	SRetrying  //
+	SFailed    //
+	SFinish    //
+)
+
+type JobFlag int
+
+const (
+	LRetryWait JobFlag = iota // wait 2+1.8^count second and retry
+	LRetryNow                 // retry now
+	LSuccess
+	LFailed
+	LDelete     // delete job, not do never
 )
 
 type Job struct {
 	topic   []byte // topic name
 	channel []byte // channel name, only listen use it
-	keys    [][]byte
-	values  [][]byte
-	count   int    // retry count
-	Status  JobStatus
+
+	keys     [][]byte
+	values   [][]byte
+	MaxRetry byte
+
+	Count    byte // retry count
+	Status   JobStatus
+	interval time.Duration
 }
+
+var maxRetryKey = []byte("__MaxRetry")
 
 func NewJob(topic string) *Job {
 	return &Job{
-		topic:s2B(topic),
+		topic:   s2B(topic),
+		MaxRetry:DefalutMaxRetryCount,
+		interval:time.Minute,
 	}
 }
 
 // encode to []byte like "key=value&name=bysir"
 func (p *Job) encode() []byte {
 	var queryBuf bytes.Buffer
-	if p.keys != nil {
-		for i, k := range p.keys {
-			if i != 0 {
-				queryBuf.WriteByte('&')
-			}
-			queryBuf.Write(k)
-			queryBuf.WriteByte('=')
-			queryBuf.Write(p.values[i])
+
+	for i, k := range p.keys {
+		if queryBuf.Len() != 0 {
+			queryBuf.WriteByte('&')
 		}
+		queryBuf.Write(k)
+		queryBuf.WriteByte('=')
+		queryBuf.Write(p.values[i])
 	}
 
-	// now, count is not save to queue
-	//queryBuf.WriteByte('#')
-	//queryBuf.WriteByte(p.count)
+	// add self params
+	if queryBuf.Len() != 0 {
+		queryBuf.WriteByte('&')
+	}
+	queryBuf.Write(maxRetryKey)
+	queryBuf.WriteByte('=')
+	queryBuf.WriteByte(p.MaxRetry + 48)
 
 	return queryBuf.Bytes()
 }
@@ -68,24 +93,31 @@ func (p *Job) decode(data []byte) bool {
 				return false
 			}
 
-			p.keys[i] = kv[0]
-			p.values[i] = kv[1]
+			if bytes.Equal(kv[0], maxRetryKey) {
+				p.MaxRetry = kv[1][0] - 48
+			} else {
+				p.keys[i] = kv[0]
+				p.values[i] = kv[1]
+			}
 		}
 	}
+
 	return true
 }
 
 func (p *Job) String() string {
 	var buf bytes.Buffer
 	switch p.Status {
-	case JobStatusFailed:
+	case SFailed:
 		buf.WriteString("FAILED ")
-	case JobStatusSuccess:
+	case SSuccess:
 		buf.WriteString("SUCCESS ")
-	case JobStatusDoing:
+	case SDoing:
 		buf.WriteString("DOING ")
-	case JobStatusRetrying:
+	case SRetrying:
 		buf.WriteString("RETRYING ")
+	case SFinish:
+		buf.WriteString("FINISHED ")
 	}
 	buf.Write(p.topic)
 	buf.WriteByte(',')
@@ -93,7 +125,7 @@ func (p *Job) String() string {
 	buf.WriteByte(':')
 	buf.Write(p.encode())
 	buf.WriteByte('#')
-	buf.WriteByte(byte(p.count) + 48)
+	buf.WriteByte(byte(p.Count) + 48)
 	return buf.String()
 }
 
@@ -103,9 +135,6 @@ func (p *Job) Channel() string {
 
 func (p *Job) Topic() string {
 	return b2S(p.topic)
-}
-func (p *Job) Count() int {
-	return p.count
 }
 
 func (p *Job) Param(key string) (value string, ok bool) {
@@ -126,13 +155,21 @@ func (p *Job) Param(key string) (value string, ok bool) {
 func (p *Job) SetParam(key string, value string) {
 	kb := s2B(key)
 	vb := s2B(value)
+	p.SetParamByte(kb, vb)
+	return
+}
+
+func (p *Job) SetParamByte(key []byte, value []byte) {
 	if p.keys == nil {
-		p.values = [][]byte{vb}
-		p.keys = [][]byte{kb}
+		p.values = [][]byte{value}
+		p.keys = [][]byte{key}
 	} else {
-		p.keys = append(p.keys, kb)
-		p.values = append(p.values, vb)
+		p.keys = append(p.keys, key)
+		p.values = append(p.values, value)
 	}
 	return
 }
 
+func (p *Job) SetInterval(duration time.Duration) {
+	p.interval = duration
+}
