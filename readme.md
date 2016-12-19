@@ -1,4 +1,4 @@
-#go-worker 
+#go-worker
 worker 4 nsq
 
 ## usage
@@ -6,7 +6,9 @@ worker 4 nsq
 client.go
 ```go
 const NsqdHost = "127.0.0.1:4150"
-c, _ := NewClientForNsq(NsqdHost)
+var wf = NewWorker(ConsumerForNsq(NsqdHost), ProducerForNsq(NsqdHost))
+
+c, _ := wf.Client()
 
 j := NewJob("order")
 j.SetParam("id", "1")
@@ -14,7 +16,8 @@ c.Push(j)
 ```
 service.go
 ```go
-s, _ := NewServerForNsq(NsqdHost)
+s, _ := wf.Server()
+
 s.Handle("order", "work", func(j *Job) (JobFlag,error) {
     log.Println("work - ", j)
     <-time.After(2 * time.Second)

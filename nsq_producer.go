@@ -9,19 +9,16 @@ type NsqProducer struct {
 	producer *nsq.Producer
 }
 
-func NewNsqProducer(host string ) (*NsqProducer, error) {
+func NewNsqProducer(host string) (*NsqProducer, error) {
 	cfg := nsq.NewConfig()
 	p, err := nsq.NewProducer(host, cfg)
 	if err != nil {
 		return nil, err
 	}
-	return &NsqProducer{
-		producer:p,
-	}, nil
+	return &NsqProducer{producer:p}, nil
 }
 
 func (p *NsqProducer) Publish(jobs ...*Job) (err error) {
-	//p.producer.DeferredPublish()
 	topic := b2S(jobs[0].topic)
 	if len(jobs) == 1 {
 		err = p.producer.Publish(topic, jobs[0].encode())

@@ -2,7 +2,8 @@ package worker
 
 import (
 	"bytes"
-	"time"
+	"net/url"
+	"strconv"
 )
 
 const DefalutMaxRetryCount = 5
@@ -10,6 +11,10 @@ const DefalutMaxRetryCount = 5
 type JobStatus int
 
 const (
+	JobStatusDoing    JobStatus = iota
+	JobStatusSuccess
+	JobStatusFailed    //
+	JobStatusRetrying  //
 	SDoing    JobStatus = iota
 	SSuccess
 	SRetrying  //
@@ -29,13 +34,19 @@ const (
 
 type Job struct {
 	topic   []byte // topic name
+	channel []byte // channel name, on listener and counter use it
+	keys    [][]byte
+	values  [][]byte
+
+	count  int
+	Status JobStatus
 	channel []byte // channel name, only listen use it
 
 	keys     [][]byte
 	values   [][]byte
 	MaxRetry byte
 
-	Count    byte // retry count
+	count    byte // retry count
 	Status   JobStatus
 	interval time.Duration
 }
@@ -125,7 +136,7 @@ func (p *Job) String() string {
 	buf.WriteByte(':')
 	buf.Write(p.encode())
 	buf.WriteByte('#')
-	buf.WriteByte(byte(p.Count) + 48)
+	buf.WriteString(strconv.Itoa(p.count))
 	return buf.String()
 }
 
@@ -136,15 +147,28 @@ func (p *Job) Channel() string {
 func (p *Job) Topic() string {
 	return b2S(p.topic)
 }
+func (p *Job) Count() int {
+	return p.count
+}
+
+func (p *Job) setCount(count int) {
+	p.count = count
+}
+
+func (p *Job) addCount() {
+	p.count++
+}
 
 func (p *Job) Param(key string) (value string, ok bool) {
 	if p.keys == nil {
 		return
 	}
 	kb := s2B(key)
+	key, _ = url.QueryUnescape(key)
 	for i, k := range p.keys {
 		if bytes.Equal(k, kb) {
 			value = b2S(p.values[i])
+			value, _ = url.QueryUnescape(value)
 			ok = true
 			return
 		}
@@ -153,20 +177,30 @@ func (p *Job) Param(key string) (value string, ok bool) {
 }
 
 func (p *Job) SetParam(key string, value string) {
+	key = url.QueryEscape(key)
+	value = url.QueryEscape(value)
 	kb := s2B(key)
 	vb := s2B(value)
 	p.SetParamByte(kb, vb)
 	return
 }
 
-func (p *Job) SetParamByte(key []byte, value []byte) {
+func (p *Job) SetParamByte(kb, vb []byte) {
 	if p.keys == nil {
-		p.values = [][]byte{value}
-		p.keys = [][]byte{key}
-	} else {
-		p.keys = append(p.keys, key)
-		p.values = append(p.values, value)
+		p.values = [][]byte{}
+		p.keys = [][]byte{}
 	}
+
+	for i, k := range p.keys {
+		if bytes.Equal(k, kb) {
+			p.values[i] = vb
+			return
+		}
+	}
+
+	p.keys = append(p.keys, kb)
+	p.values = append(p.values, vb)
+
 	return
 }
 
