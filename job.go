@@ -4,17 +4,14 @@ import (
 	"bytes"
 	"net/url"
 	"strconv"
+	"time"
 )
 
-const DefalutMaxRetryCount = 5
+const DefaultMaxRetryCount = 5
 
 type JobStatus int
 
 const (
-	JobStatusDoing    JobStatus = iota
-	JobStatusSuccess
-	JobStatusFailed    //
-	JobStatusRetrying  //
 	SDoing    JobStatus = iota
 	SSuccess
 	SRetrying  //
@@ -38,15 +35,9 @@ type Job struct {
 	keys    [][]byte
 	values  [][]byte
 
-	count  int
-	Status JobStatus
-	channel []byte // channel name, only listen use it
+	MaxRetry int
 
-	keys     [][]byte
-	values   [][]byte
-	MaxRetry byte
-
-	count    byte // retry count
+	count    int // retry count
 	Status   JobStatus
 	interval time.Duration
 }
@@ -56,7 +47,7 @@ var maxRetryKey = []byte("__MaxRetry")
 func NewJob(topic string) *Job {
 	return &Job{
 		topic:   s2B(topic),
-		MaxRetry:DefalutMaxRetryCount,
+		MaxRetry:DefaultMaxRetryCount,
 		interval:time.Minute,
 	}
 }
@@ -80,7 +71,7 @@ func (p *Job) encode() []byte {
 	}
 	queryBuf.Write(maxRetryKey)
 	queryBuf.WriteByte('=')
-	queryBuf.WriteByte(p.MaxRetry + 48)
+	queryBuf.WriteString(strconv.Itoa(p.MaxRetry))
 
 	return queryBuf.Bytes()
 }
@@ -105,7 +96,7 @@ func (p *Job) decode(data []byte) bool {
 			}
 
 			if bytes.Equal(kv[0], maxRetryKey) {
-				p.MaxRetry = kv[1][0] - 48
+				p.MaxRetry, _ = strconv.Atoi(b2S(kv[1]))
 			} else {
 				p.keys[i] = kv[0]
 				p.values[i] = kv[1]

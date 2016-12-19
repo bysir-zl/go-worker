@@ -12,14 +12,11 @@ import (
 // 但是又不能重新放回队列, 这样所有channel都会收到信息
 const maxGoRoutine int = 30000
 
-type worker struct {
-}
-
-type WorkerServer struct {
-	consumers       []Consumer              //
-	listener        func(j *Job, err error) //
-	consumerCreator func(topic, channel string) (Consumer, error)
-	ch              chan int // channel buffer to controll max jobs
+type Server struct {
+	consumers []Consumer              //
+	listener  func(j *Job, err error) //
+	parent    *Factory
+	ch        chan int // channel buffer to controll max jobs
 }
 
 type Handler func(j *Job) (JobFlag, error)
@@ -52,7 +49,7 @@ func (p *Server) Handle(topic, channel string, fun Handler) (err error) {
 	return
 }
 
-func (p *Server) callJob(job *Job, handler Handler) {
+func (p *Server) callJob(job *Job, handler Handler, finish chan int) {
 
 	job.addCount()
 
@@ -68,21 +65,17 @@ func (p *Server) callJob(job *Job, handler Handler) {
 			}
 		}
 		if finish != nil {
-			<-p.ch
+			<-finish
 		}
 	}()
 
 	flag, err := handler(job)
 	c := job.Count()
 	switch flag {
-	case JobFlagRetryNow:
-		if c < maxRetryCount {
-			job.Status = JobStatusRetrying
-			if c == 1 {
 	case LRetryNow:
-		if job.Count < job.MaxRetry {
+		if c < job.MaxRetry {
 			job.Status = SRetrying
-			if job.Count == 1 {
+			if c == 1 {
 				// notify is retrying
 				p.callListen(job, err)
 			}
@@ -93,9 +86,9 @@ func (p *Server) callJob(job *Job, handler Handler) {
 			p.callListen(job, err)
 		}
 	case LRetryWait:
-		if job.Count < job.MaxRetry {
+		if c < job.MaxRetry {
 			job.Status = SRetrying
-			if job.Count == 1 {
+			if c == 1 {
 				// notify is retrying
 				p.callListen(job, err)
 			}
@@ -155,21 +148,21 @@ func (p *Server) Listen(fun func(j *Job, err error)) {
 }
 
 func newServer(parent *Factory) (*Server, error) {
-	producer, err := parent.producerCreator()
-	if err != nil {
-		return nil, err
-	}
 	c := Server{
 		consumers:      []Consumer{},
-		producer:       producer,
 		parent:         parent,
 		ch:             make(chan int, maxGoRoutine),
+	}
+	return &c, nil
+}
+
 // add a looped job. will call listener with status is SFinish if it stopped
-func (p *WorkerServer) AddLoopJob(j *Job, fun Handler) {
+func (p *Server) AddLoopJob(j *Job, fun Handler) {
 	loop := func(j *Job) {
 		log.Printf("[WORKER] LoopJob %s is running\n", j.Topic())
 		for {
 			<-time.After(j.interval)
+			j.Status = SDoing
 			p.callJob(j, fun, nil)
 			if j.Status == SFinish {
 				break
@@ -178,13 +171,4 @@ func (p *WorkerServer) AddLoopJob(j *Job, fun Handler) {
 		log.Printf("[WORKER] LoopJob %s is stopped\n", j.Topic())
 	}
 	go loop(j)
-}
-
-func NewServer(consumerCreator func(topic, channel string) (Consumer, error)) (*WorkerServer, error) {
-	c := WorkerServer{
-		consumers:       []Consumer{},
-		consumerCreator: consumerCreator,
-		ch:              make(chan int, maxGoRoutine),
-	}
-	return &c, nil
 }
