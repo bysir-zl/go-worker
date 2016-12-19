@@ -2,24 +2,26 @@ package worker
 
 import (
 	"bytes"
+	"strconv"
 )
 
 type JobStatus int
 
 const (
-	JobStatusDoing JobStatus = iota
+	JobStatusDoing    JobStatus = iota
 	JobStatusSuccess
-	JobStatusFailed //
-	JobStatusRetrying //
+	JobStatusFailed    //
+	JobStatusRetrying  //
 )
 
 type Job struct {
 	topic   []byte // topic name
-	channel []byte // channel name, only listen use it
+	channel []byte // channel name, on listener and counter use it
 	keys    [][]byte
 	values  [][]byte
-	count   int    // retry count
-	Status  JobStatus
+
+	count  int
+	Status JobStatus
 }
 
 func NewJob(topic string) *Job {
@@ -33,7 +35,7 @@ func (p *Job) encode() []byte {
 	var queryBuf bytes.Buffer
 	if p.keys != nil {
 		for i, k := range p.keys {
-			if i != 0 {
+			if queryBuf.Len() != 0 {
 				queryBuf.WriteByte('&')
 			}
 			queryBuf.Write(k)
@@ -93,7 +95,7 @@ func (p *Job) String() string {
 	buf.WriteByte(':')
 	buf.Write(p.encode())
 	buf.WriteByte('#')
-	buf.WriteByte(byte(p.count) + 48)
+	buf.WriteString(strconv.Itoa(p.count))
 	return buf.String()
 }
 
@@ -106,6 +108,14 @@ func (p *Job) Topic() string {
 }
 func (p *Job) Count() int {
 	return p.count
+}
+
+func (p *Job) setCount(count int) {
+	p.count = count
+}
+
+func (p *Job) addCount() {
+	p.count++
 }
 
 func (p *Job) Param(key string) (value string, ok bool) {
@@ -126,13 +136,25 @@ func (p *Job) Param(key string) (value string, ok bool) {
 func (p *Job) SetParam(key string, value string) {
 	kb := s2B(key)
 	vb := s2B(value)
-	if p.keys == nil {
-		p.values = [][]byte{vb}
-		p.keys = [][]byte{kb}
-	} else {
-		p.keys = append(p.keys, kb)
-		p.values = append(p.values, vb)
-	}
+	p.SetParamByte(kb, vb)
 	return
 }
 
+func (p *Job) SetParamByte(kb, vb []byte) {
+	if p.keys == nil {
+		p.values = [][]byte{}
+		p.keys = [][]byte{}
+	}
+
+	for i, k := range p.keys {
+		if bytes.Equal(k, kb) {
+			p.values[i] = vb
+			return
+		}
+	}
+
+	p.keys = append(p.keys, kb)
+	p.values = append(p.values, vb)
+
+	return
+}

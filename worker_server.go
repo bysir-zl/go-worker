@@ -1,40 +1,39 @@
 package worker
 
 import (
-	"log"
-	"math"
-	"time"
-	"fmt"
 	"errors"
+	"fmt"
+	"log"
+	"time"
 )
 
 type JobFlag int
 
 // todo 需要根据实际情况调优
+// 这里还需要注意一个问题, 就是当一个job需要延时重试的时候, 将长时占用routine, 可能这是一个问题
+// 但是又不能重新放回队列, 这样所有channel都会收到信息
 const maxGoRoutine int = 30000
 
 const (
-	JobFlagRetryWait JobFlag = iota // wait 2+1.8^count second and retry
-	JobFlagRetryNow  // retry now
+	JobFlagRetryWait JobFlag = iota // wait 2+3*count second and retry
+	JobFlagRetryNow                 // retry now
 	JobFlagSuccess
 	JobFlagFailed
 )
 
 const maxRetryCount int = 5
 
-type worker struct {
-}
-
-type WorkerServer struct {
-	consumers       []Consumer              //
-	listener        func(j *Job, err error) //
-	consumerCreator func(topic, channel string) (Consumer, error)
-	ch              chan int
+type Server struct {
+	consumers []Consumer              //
+	producer  Producer                //
+	listener  func(j *Job, err error) //
+	ch        chan int
+	parent    *Worker
 }
 
 type Handler func(j *Job) (JobFlag, error)
 
-func (p *WorkerServer) callListen(j *Job, err error) {
+func (p *Server) callListen(j *Job, err error) {
 	if p.listener != nil {
 		defer func() {
 			i := recover()
@@ -46,8 +45,8 @@ func (p *WorkerServer) callListen(j *Job, err error) {
 	}
 }
 
-func (p *WorkerServer) Handle(topic, channel string, fun Handler) (err error) {
-	consumer, err := p.consumerCreator(topic, channel)
+func (p *Server) Handle(topic, channel string, fun Handler) (err error) {
+	consumer, err := p.parent.consumerCreator(topic, channel)
 	if err != nil {
 		return
 	}
@@ -60,7 +59,10 @@ func (p *WorkerServer) Handle(topic, channel string, fun Handler) (err error) {
 	return
 }
 
-func (p *WorkerServer) callJob(job *Job, handler Handler) {
+func (p *Server) callJob(job *Job, handler Handler) {
+
+	job.addCount()
+
 	defer func() {
 		i := recover()
 		if i != nil {
@@ -75,35 +77,33 @@ func (p *WorkerServer) callJob(job *Job, handler Handler) {
 		<-p.ch
 	}()
 
-	job.count++
 	flag, err := handler(job)
-
+	c := job.Count()
 	switch flag {
 	case JobFlagRetryNow:
-		if job.count < maxRetryCount {
+		if c < maxRetryCount {
 			job.Status = JobStatusRetrying
-			if job.count == 1 {
+			if c == 1 {
 				// notify is retrying
 				p.callListen(job, err)
 			}
-
 			p.callJob(job, handler)
 		} else {
 			job.Status = JobStatusFailed
 			p.callListen(job, err)
 		}
 	case JobFlagRetryWait:
-		if job.count < maxRetryCount {
+		if c < maxRetryCount {
 			job.Status = JobStatusRetrying
-			if job.count == 1 {
+			if c == 1 {
 				// notify is retrying
 				p.callListen(job, err)
 			}
 
-			t := int64(math.Pow(1.8, float64(job.count)))
+			t := c * 2
 			t = t + 2
-			if t > 60 {
-				t = 60
+			if t > 10 {
+				t = 10
 			}
 			d := time.Duration(t * 1e9)
 			<-time.After(d)
@@ -121,18 +121,21 @@ func (p *WorkerServer) callJob(job *Job, handler Handler) {
 	}
 }
 
-func (p *WorkerServer) Server() {
+func (p *Server) Server() (error) {
 	var exitChan chan int
 
 	for _, c := range p.consumers {
-		c.Server()
+		err := c.Server()
+		if err != nil {
+			return err
+		}
 		go func(s chan int) {
 			<-s
 			exitChan <- 0
 		}(c.StopChan())
 	}
 
-	log.Printf("[WORKER] started %d worker(s)", len(p.consumers))
+	log.Printf("[WORKER] started %d wroker(s)", len(p.consumers))
 	<-exitChan
 	log.Println("[WORKER] server exited")
 	close(exitChan)
@@ -140,25 +143,24 @@ func (p *WorkerServer) Server() {
 	for _, c := range p.consumers {
 		c.Stop()
 	}
-
+	return nil
 }
 
-func (p *WorkerServer) Listen(fun func(j *Job, err error)) {
+func (p *Server) Listen(fun func(j *Job, err error)) {
 	p.listener = fun
 	return
 }
 
-func NewServer(consumerCreator func(topic, channel string) (Consumer, error)) (*WorkerServer, error) {
-	c := WorkerServer{
-		consumers: []Consumer{},
-		consumerCreator:consumerCreator,
-		ch:make(chan int,maxGoRoutine),
+func newServer(parent *Worker) (*Server, error) {
+	producer, err := parent.producerCreator()
+	if err != nil {
+		return nil, err
+	}
+	c := Server{
+		consumers:      []Consumer{},
+		producer:       producer,
+		parent:         parent,
+		ch:             make(chan int, maxGoRoutine),
 	}
 	return &c, nil
-}
-
-func NewServerForNsq(host string) (*WorkerServer, error) {
-	return NewServer(func(topic, channel string) (Consumer, error) {
-		return NewNsqConsumer(host, topic, channel)
-	})
 }

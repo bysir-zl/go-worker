@@ -1,15 +1,17 @@
 package worker
 
 import (
-	"testing"
 	"log"
+	"testing"
 	"time"
 )
 
 const NsqdHost = "127.0.0.1:4150"
 
+var wf = NewWorker(ConsumerForNsq(NsqdHost), ProducerForNsq(NsqdHost))
+
 func TestPublish(t *testing.T) {
-	c, _ := NewClientForNsq(NsqdHost)
+	c, _ := wf.Client()
 
 	j := NewJob("order")
 	j.SetParam("id", "1")
@@ -18,17 +20,17 @@ func TestPublish(t *testing.T) {
 }
 
 func TestHandle(t *testing.T) {
-	s, _ := NewServerForNsq(NsqdHost)
-	s.Handle("order", "work", func(j *Job) (JobFlag,error) {
+	s, _ := wf.Server()
+	s.Handle("order", "work", func(j *Job) (JobFlag, error) {
 		log.Println("work - ", j)
 		<-time.After(2 * time.Second)
-		return JobFlagSuccess,nil
+		return JobFlagSuccess, nil
 	})
 
-	s.Handle("order", "loger", func(j *Job) (JobFlag,error)  {
+	s.Handle("order", "loger", func(j *Job) (JobFlag, error) {
 		log.Println("loger - ", j)
 		<-time.After(1 * time.Second)
-		return JobFlagRetryNow,nil
+		return JobFlagRetryNow, nil
 	})
 
 	s.Listen(func(j *Job, err error) {
@@ -40,7 +42,8 @@ func TestHandle(t *testing.T) {
 
 // 98004 ns/op
 func BenchmarkPublish(b *testing.B) {
-	c, _ := NewClientForNsq(NsqdHost)
+	worker := NewWorker(ConsumerForNsq(NsqdHost), ProducerForNsq(NsqdHost))
+	c, _ := worker.Client()
 
 	j := NewJob("order")
 	j.SetParam("id", "1")
