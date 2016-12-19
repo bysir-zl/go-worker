@@ -2,6 +2,7 @@ package worker
 
 import (
 	"bytes"
+	"net/url"
 	"strconv"
 )
 
@@ -123,9 +124,11 @@ func (p *Job) Param(key string) (value string, ok bool) {
 		return
 	}
 	kb := s2B(key)
+	key, _ = url.QueryUnescape(key)
 	for i, k := range p.keys {
 		if bytes.Equal(k, kb) {
 			value = b2S(p.values[i])
+			value, _ = url.QueryUnescape(value)
 			ok = true
 			return
 		}
@@ -134,6 +137,8 @@ func (p *Job) Param(key string) (value string, ok bool) {
 }
 
 func (p *Job) SetParam(key string, value string) {
+	key = url.QueryEscape(key)
+	value = url.QueryEscape(value)
 	kb := s2B(key)
 	vb := s2B(value)
 	p.SetParamByte(kb, vb)

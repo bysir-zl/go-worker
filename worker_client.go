@@ -9,7 +9,7 @@ func (p *Client) Push(jobs ...*Job)error {
 	return p.producer.Publish(jobs...)
 }
 
-func newClient(pa *Worker) (*Client, error) {
+func newClient(pa *Factory) (*Client, error) {
 	p, err := pa.producerCreator()
 	if err != nil {
 		return nil, err

@@ -28,7 +28,7 @@ type Server struct {
 	producer  Producer                //
 	listener  func(j *Job, err error) //
 	ch        chan int
-	parent    *Worker
+	parent    *Factory
 }
 
 type Handler func(j *Job) (JobFlag, error)
@@ -151,7 +151,7 @@ func (p *Server) Listen(fun func(j *Job, err error)) {
 	return
 }
 
-func newServer(parent *Worker) (*Server, error) {
+func newServer(parent *Factory) (*Server, error) {
 	producer, err := parent.producerCreator()
 	if err != nil {
 		return nil, err

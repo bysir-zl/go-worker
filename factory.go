@@ -3,23 +3,23 @@ package worker
 type ConsumerCreator func(topic, channel string) (Consumer, error)
 type ProducerCreator func() (Producer, error)
 
-type Worker struct {
+type Factory struct {
 	consumerCreator ConsumerCreator
 	producerCreator ProducerCreator
 }
 
-func NewWorker(consumerCreator ConsumerCreator, producerCreator ProducerCreator) *Worker {
-	return &Worker{
+func NewWorker(consumerCreator ConsumerCreator, producerCreator ProducerCreator) *Factory {
+	return &Factory{
 		consumerCreator:consumerCreator,
 		producerCreator:producerCreator,
 	}
 }
 
-func (p *Worker) Client() (*Client, error) {
+func (p *Factory) Client() (*Client, error) {
 	return newClient(p)
 }
 
-func (p *Worker) Server() (*Server, error) {
+func (p *Factory) Server() (*Server, error) {
 	return newServer(p)
 }
 
