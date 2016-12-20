@@ -12,21 +12,21 @@ const DefaultMaxRetryCount = 5
 type JobStatus int
 
 const (
-	SDoing    JobStatus = iota
+	SDoing JobStatus = iota
 	SSuccess
-	SRetrying  //
-	SFailed    //
-	SFinish    //
+	SRetrying //
+	SFailed   //
+	SFinish   //
 )
 
 type JobFlag int
 
 const (
-	LRetryWait JobFlag = iota // wait 2+1.8^count second and retry
-	LRetryNow                 // retry now
-	LSuccess
-	LFailed
-	LDelete     // delete job, not do never
+	FRetryWait JobFlag = iota // wait 2+3*second and retry
+	FRetryNow                 // retry now
+	FSuccess
+	FFailed
+	FDelete // delete job, not do never
 )
 
 type Job struct {
@@ -46,9 +46,9 @@ var maxRetryKey = []byte("__MaxRetry")
 
 func NewJob(topic string) *Job {
 	return &Job{
-		topic:   s2B(topic),
-		MaxRetry:DefaultMaxRetryCount,
-		interval:time.Minute,
+		topic:    s2B(topic),
+		MaxRetry: DefaultMaxRetryCount,
+		interval: time.Minute,
 	}
 }
 

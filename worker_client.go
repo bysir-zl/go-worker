@@ -19,4 +19,3 @@ func newClient(pa *Factory) (*Client, error) {
 	}
 	return &c, nil
 }
-

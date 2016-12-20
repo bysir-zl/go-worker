@@ -21,13 +21,13 @@ s, _ := wf.Server()
 s.Handle("order", "work", func(j *Job) (JobFlag,error) {
     log.Println("work - ", j)
     <-time.After(2 * time.Second)
-    return LSuccess,nil
+    return FSuccess,nil
 })
 
 s.Handle("order", "loger", func(j *Job) (JobFlag,error)  {
     log.Println("loger - ", j)
     <-time.After(1 * time.Second)
-    return LRetryNow,nil
+    return FRetryNow,nil
 })
 
 s.Listen(func(j *Job, err error) {

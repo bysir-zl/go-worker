@@ -72,7 +72,7 @@ func (p *Server) callJob(job *Job, handler Handler, finish chan int) {
 	flag, err := handler(job)
 	c := job.Count()
 	switch flag {
-	case LRetryNow:
+	case FRetryNow:
 		if c < job.MaxRetry {
 			job.Status = SRetrying
 			if c == 1 {
@@ -85,7 +85,7 @@ func (p *Server) callJob(job *Job, handler Handler, finish chan int) {
 			job.Status = SFailed
 			p.callListen(job, err)
 		}
-	case LRetryWait:
+	case FRetryWait:
 		if c < job.MaxRetry {
 			job.Status = SRetrying
 			if c == 1 {
@@ -105,13 +105,13 @@ func (p *Server) callJob(job *Job, handler Handler, finish chan int) {
 			job.Status = SFailed
 			p.callListen(job, err)
 		}
-	case LSuccess:
+	case FSuccess:
 		job.Status = SSuccess
 		p.callListen(job, err)
-	case LFailed:
+	case FFailed:
 		job.Status = SFailed
 		p.callListen(job, err)
-	case LDelete:
+	case FDelete:
 		job.Status = SFinish
 		p.callListen(job, err)
 	}
@@ -162,13 +162,23 @@ func (p *Server) AddLoopJob(j *Job, fun Handler) {
 		log.Printf("[WORKER] LoopJob %s is running\n", j.Topic())
 		for {
 			<-time.After(j.interval)
-			j.Status = SDoing
-			p.callJob(j, fun, nil)
-			if j.Status == SFinish {
+			var stop chan int
+
+			go func(j *Job, stop chan int) {
+				j.Status = SDoing
+				p.callJob(j, fun, nil)
+				if j.Status == SFinish {
+					stop <- 0
+				}
+			}(j, stop)
+
+			select {
+			case <-stop:
 				break
 			}
 		}
 		log.Printf("[WORKER] LoopJob %s is stopped\n", j.Topic())
 	}
+
 	go loop(j)
 }

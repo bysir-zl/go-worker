@@ -24,20 +24,20 @@ func TestHandle(t *testing.T) {
 	s.Handle("order", "work", func(j *Job) (JobFlag, error) {
 		log.Println("work - ", j)
 		<-time.After(2 * time.Second)
-		return LSuccess,nil
+		return FSuccess,nil
 	})
 
 	s.Handle("order", "loger", func(j *Job) (JobFlag, error) {
 		log.Println("loger - ", j)
 		<-time.After(1 * time.Second)
-		return LRetryNow, nil
+		return FRetryNow, nil
 	})
 
 	j := NewJob("Loopper")
 	j.SetInterval(time.Second * 2)
 	s.AddLoopJob(j, func(j *Job) (JobFlag, error) {
 		log.Print("loop - ", j)
-		return LSuccess, nil
+		return FSuccess, nil
 	})
 
 	s.Listen(func(j *Job, err error) {
