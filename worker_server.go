@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"sync"
 	"time"
 )
 
@@ -15,8 +16,15 @@ const maxGoRoutine int = 30000
 type Server struct {
 	consumers []Consumer              //
 	listener  func(j *Job, err error) //
+	loopJobs  []LoopJob
 	parent    *Factory
 	ch        chan int // channel buffer to controll max jobs
+	exitWG    sync.WaitGroup
+}
+
+type LoopJob struct {
+	job    *Job
+	handle Handler
 }
 
 type Handler func(j *Job) (JobFlag, error)
@@ -50,7 +58,6 @@ func (p *Server) Handle(topic, channel string, fun Handler) (err error) {
 }
 
 func (p *Server) callJob(job *Job, handler Handler, finish chan int) {
-
 	job.addCount()
 
 	defer func() {
@@ -118,28 +125,58 @@ func (p *Server) callJob(job *Job, handler Handler, finish chan int) {
 }
 
 func (p *Server) Server() (error) {
-	var exitChan chan int
-
-	for _, c := range p.consumers {
-		err := c.Server()
-		if err != nil {
-			return err
+	if p.consumers != nil && len(p.consumers) != 0 {
+		for _, c := range p.consumers {
+			p.exitWG.Add(1)
+			err := c.Server()
+			if err != nil {
+				return err
+			}
+			go func(c Consumer) {
+				<-c.StopChan()
+				p.exitWG.Done()
+				c.Stop()
+			}(c)
 		}
-		go func(s chan int) {
-			<-s
-			exitChan <- 0
-		}(c.StopChan())
+
+		log.Printf("[WORKER] started %d wroker(s)", len(p.consumers))
 	}
 
-	log.Printf("[WORKER] started %d wroker(s)", len(p.consumers))
-	<-exitChan
-	log.Println("[WORKER] server exited")
-	close(exitChan)
+	if p.loopJobs != nil && len(p.loopJobs) != 0 {
+		for _, l := range p.loopJobs {
+			p.exitWG.Add(1)
+			loop := func(l LoopJob) {
+				log.Printf("[WORKER] LoopJob %s is running\n", l.job.Topic())
+				for {
+					var stop chan int
+					go func(stop chan int) {
+						l.job.Status = SDoing
+						p.callJob(l.job, l.handle, nil)
+						if l.job.Status == SFinish {
+							stop <- 0
+						}
+					}(stop)
 
-	for _, c := range p.consumers {
-		c.Stop()
+					select {
+					case <-stop:
+						break
+					default:
+						<-time.After(l.job.interval)
+					}
+				}
+				log.Printf("[WORKER] LoopJob %s is stopped\n", l.job.Topic())
+				p.exitWG.Done()
+			}
+
+			go loop(l)
+		}
 	}
+
 	return nil
+}
+
+func (p *Server) Wait() {
+	p.exitWG.Wait()
 }
 
 func (p *Server) Listen(fun func(j *Job, err error)) {
@@ -158,27 +195,9 @@ func newServer(parent *Factory) (*Server, error) {
 
 // add a looped job. will call listener with status is SFinish if it stopped
 func (p *Server) AddLoopJob(j *Job, fun Handler) {
-	loop := func(j *Job) {
-		log.Printf("[WORKER] LoopJob %s is running\n", j.Topic())
-		for {
-			<-time.After(j.interval)
-			var stop chan int
-
-			go func(j *Job, stop chan int) {
-				j.Status = SDoing
-				p.callJob(j, fun, nil)
-				if j.Status == SFinish {
-					stop <- 0
-				}
-			}(j, stop)
-
-			select {
-			case <-stop:
-				break
-			}
-		}
-		log.Printf("[WORKER] LoopJob %s is stopped\n", j.Topic())
+	if p.loopJobs == nil {
+		p.loopJobs = []LoopJob{{j, fun}}
+	} else {
+		p.loopJobs = append(p.loopJobs, LoopJob{j, fun})
 	}
-
-	go loop(j)
 }
